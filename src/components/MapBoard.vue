@@ -20,6 +20,7 @@
       <div class="legend-item"><i class="dot" style="background:#2962ff"></i>资源库/救援点</div>
       <div class="legend-item"><i class="dot" style="background:#26a69a"></i>安置点/转移路线</div>
       <div class="legend-item"><i class="dot" style="background:#c62828"></i>道路阻断区</div>
+      <div class="legend-item"><i class="dot" style="background:#ff9800"></i>道路抢修工单</div>
     </div>
 
     <!-- 圈画提示 -->
@@ -48,12 +49,14 @@ import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useCommandStore } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
 import { loadAMap } from '@/config/amap'
 import { EVENT_TYPES, SEVERITY, RESOURCE_TYPES } from '@/mock/data'
 
 const store = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 const mapRef = ref(null)
 const loading = ref(true)
 const loadError = ref('')
@@ -63,7 +66,7 @@ let amap = null
 let heatmap = null
 let overlays = {
   poly: [], markers: [], lines: [], baseMarkers: [], shelterMarkers: [], transferLines: [],
-  blocks: [], blockMarkers: [], draft: []
+  blocks: [], blockMarkers: [], draft: [], repairLines: [], repairMarkers: []
 }
 
 const selectedEvent = computed(() =>
@@ -332,6 +335,56 @@ function renderDraft() {
   })
 }
 
+// 道路抢修：基地 → 阻断质心路线（抢修中实线，待接单/待验收/已延期区分）+ 🔧 进度标记
+const REPAIR_MARKER = {
+  assigned: { icon: '🔧', color: '#4d8dff' },
+  accepted: { icon: '🔧', color: '#ff9800' },
+  delayed: { icon: '⏳', color: '#ff7043' },
+  done: { icon: '🔍', color: '#ab47bc' }
+}
+function repairMarkerContent(wo) {
+  const m = REPAIR_MARKER[wo.status] || REPAIR_MARKER.accepted
+  return `
+    <div class="rp-marker" style="--c:${m.color}" title="道路抢修工单 · ${repair.statusMeta(wo.status).label} ${wo.progress}%">
+      <span>${m.icon}</span><em>${wo.progress}%</em>
+    </div>`
+}
+function renderRepair() {
+  overlays.repairLines.forEach((o) => map?.remove(o))
+  overlays.repairMarkers.forEach((o) => map?.remove(o))
+  overlays.repairLines = []
+  overlays.repairMarkers = []
+  if (!amap || !map) return
+  repair.orders.forEach((wo) => {
+    if (!['assigned', 'accepted', 'delayed', 'done'].includes(wo.status)) return
+    const base = store.bases.find((b) => b.id === wo.baseId)
+    if (base) {
+      const m = REPAIR_MARKER[wo.status] || REPAIR_MARKER.accepted
+      const line = new amap.Polyline({
+        path: [[base.lng, base.lat], [wo.lng, wo.lat]],
+        strokeColor: m.color,
+        strokeOpacity: 0.55,
+        strokeWeight: 2.5,
+        lineJoin: 'round',
+        lineCap: 'round',
+        strokeStyle: 'dashed',
+        showDir: wo.status === 'accepted' || wo.status === 'delayed'
+      })
+      map.add(line)
+      overlays.repairLines.push(line)
+    }
+    // 相对阻断质心略微偏移，避免与 🚧 标记重叠
+    const marker = new amap.Marker({
+      position: [wo.lng + 0.012, wo.lat + 0.006],
+      content: repairMarkerContent(wo),
+      anchor: 'center',
+      cursor: 'pointer'
+    })
+    map.add(marker)
+    overlays.repairMarkers.push(marker)
+  })
+}
+
 // 圈画模式：地图事件挂载/卸载
 function onDrawClick(e) {
   roadblock.addDraftPoint(e.lnglat.lng, e.lnglat.lat)
@@ -376,6 +429,7 @@ onMounted(async () => {
     renderShelters()
     renderTransfers()
     renderBlocks()
+    renderRepair()
     loading.value = false
     map.setFitView(null, false, [100, 80, 120, 80], 1)
   } catch (e) {
@@ -397,6 +451,8 @@ onBeforeUnmount(() => {
   overlays.blocks.forEach((p) => map?.remove(p))
   overlays.blockMarkers.forEach((m) => map?.remove(m))
   overlays.draft.forEach((o) => map?.remove(o))
+  overlays.repairLines.forEach((o) => map?.remove(o))
+  overlays.repairMarkers.forEach((o) => map?.remove(o))
   map?.destroy()
 })
 
@@ -434,6 +490,11 @@ watch(
 )
 watch(() => roadblock.draft.length, () => renderDraft())
 watch(() => roadblock.drawing, (on) => bindDrawing(on))
+// 抢修工单：分配/接单/进度/状态变化 → 重绘路线与标记
+watch(
+  () => repair.orders.map((o) => o.id + o.status + o.progress + (o.baseId || '')).join(','),
+  () => renderRepair()
+)
 // 选中阻断 → 地图聚焦该封闭区
 watch(() => roadblock.selectedBlockId, (id) => {
   const blk = roadblock.blocks.find((b) => b.id === id)
@@ -609,5 +670,20 @@ watch(() => roadblock.selectedBlockId, (id) => {
   width: 10px; height: 10px; border-radius: 50%;
   background: #ef5350; border: 2px solid #fff;
   box-shadow: 0 1px 5px rgba(0,0,0,0.5);
+}
+/* 道路抢修工单标记 */
+.rp-marker {
+  position: relative;
+  min-width: 28px; height: 24px; padding: 0 6px;
+  border-radius: 13px;
+  background: #0c1730;
+  border: 2px solid var(--c, #ff9800);
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+.rp-marker span { font-size: 12px; }
+.rp-marker em {
+  font-style: normal; font-size: 9px; color: var(--c, #ff9800); font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -29,6 +29,7 @@ import { onMounted, watch } from 'vue'
 import { useCommandStore } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
 import CommandHeader from '@/components/CommandHeader.vue'
 import EventList from '@/components/EventList.vue'
 import MapBoard from '@/components/MapBoard.vue'
@@ -38,12 +39,14 @@ import EventDetail from '@/components/EventDetail.vue'
 const store = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 onMounted(() => {
   store.loadScenario(store.scenarioId)
   transfer.load()
+  repair.load()
 })
-// 切换灾情场景时重置转移安置与道路阻断数据
-watch(() => store.scenarioId, () => { transfer.load(); roadblock.load() })
+// 切换灾情场景时重置转移安置、道路阻断与抢修工单数据
+watch(() => store.scenarioId, () => { transfer.load(); roadblock.load(); repair.load() })
 </script>
 
 <style scoped>

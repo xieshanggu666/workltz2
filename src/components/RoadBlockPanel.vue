@@ -3,6 +3,7 @@
     <!-- 总览 -->
     <div class="rb-summary">
       <span>🚧 生效中 <b>{{ roadblock.activeBlocks.length }}</b></span>
+      <span>🔧 抢修中 <b>{{ repair.inProgressCount }}</b></span>
       <span>⏸ 挂起任务 <b>{{ roadblock.heldCount }}</b></span>
       <span>✅ 已恢复 <b>{{ clearedCount }}</b></span>
     </div>
@@ -13,7 +14,7 @@
       <button class="quick-btn" :disabled="!selectedEvent" @click="onQuick">
         ⚡ 快捷上报（当前事件运输走廊）
       </button>
-      <p class="rb-hint">现场人员上报封闭范围 → 指挥员确认影响 → 生成绕行/改派方案 → 恢复通行后续派</p>
+      <p class="rb-hint">现场人员上报封闭范围 → 指挥员确认影响 → 生成绕行/改派方案；阻断可发起道路抢修工单，验收通过后自动解封并重算运输</p>
     </template>
 
     <!-- 圈画中 -->
@@ -102,7 +103,18 @@
             🚀 执行全部方案（{{ pendingCount(blk) }}）
           </button>
         </div>
-        <button class="clear-btn" @click.stop="onClear(blk)">✅ 恢复通行</button>
+
+        <!-- 道路抢修工单：阻断记录发起 → 分配 → 接单 → 进度 → 完工验收 -->
+        <div @click.stop>
+          <RepairOrderBox :block-id="blk.id" />
+        </div>
+
+        <button
+          class="clear-btn"
+          :disabled="!!repair.orderByBlock[blk.id]"
+          :title="repair.orderByBlock[blk.id] ? '抢修工单进行中，验收通过后自动解除封闭' : ''"
+          @click.stop="onClear(blk)"
+        >✅ 恢复通行</button>
       </template>
       <p v-else class="bc-meta">✅ {{ blk.clearedAt }} 恢复通行</p>
 
@@ -135,10 +147,13 @@ import { ref, computed } from 'vue'
 import { useCommandStore, dispatchParts } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
+import RepairOrderBox from '@/components/RepairOrderBox.vue'
 
 const cmd = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 
 const form = ref({ name: '', reason: '塌方/滑坡', reporter: '' })
 const reportMsg = ref('')
@@ -310,6 +325,10 @@ function onResumeAll() {
   background: rgba(76,175,80,0.08); color: #a5d6a7; font-size: 11px; font-weight: 600; cursor: pointer;
 }
 .clear-btn:hover { background: rgba(76,175,80,0.18); }
+.clear-btn:disabled {
+  opacity: 0.4; cursor: not-allowed; border-color: rgba(120,160,220,0.2);
+  color: #5b6f94; background: transparent;
+}
 
 /* 处置日志 */
 .blk-log { margin-top: 8px; border-top: 1px dashed rgba(120,160,220,0.15); padding-top: 6px; }
