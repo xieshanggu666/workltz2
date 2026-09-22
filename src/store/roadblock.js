@@ -1,10 +1,18 @@
 import { defineStore } from 'pinia'
 import { useCommandStore, pathMetrics, dispatchParts } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
+import { useRepairStore } from '@/store/repair'
 import { pointInPolygon, pathBlocked, firstBlocker, detourPathMulti } from '@/utils/geo'
 
 let blkSeq = 0
 const nowStr = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+// 阻断恢复后联动抢修工单自动办结（repair store 尚未注册时静默跳过）
+function notifyBlockCleared(blockId) {
+  try {
+    useRepairStore().settleByBlock(blockId, '道路恢复通行')
+  } catch { /* 抢修模块未初始化 */ }
+}
 
 // 道路阻断处置：现场上报 → 影响评估 → 指挥员确认 → 绕行/改派/挂起 → 恢复通行 → 续派
 export const useRoadblockStore = defineStore('roadblock', {
@@ -571,6 +579,9 @@ export const useRoadblockStore = defineStore('roadblock', {
       if (straightened) this._log(blk, `↩️ ${straightened} 条绕行路线恢复直线`)
       if (rerouted) this._log(blk, `🔀 ${rerouted} 条路线在剩余生效阻断下重新联合绕行`)
       if (stranded) this._log(blk, `⚠️ ${stranded} 条任务的起/终点仍在其它封闭区内，保持现有路线待处置`)
+
+      // 联动：该阻断上仍在进行的抢修工单自动办结/撤单并按实际消耗归还资源
+      notifyBlockCleared(blk.id)
     },
 
     // 一键续派：挂起任务逐个复核路线与库存（仍被任一生效阻断穿越的保持挂起）

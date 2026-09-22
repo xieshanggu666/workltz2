@@ -102,7 +102,25 @@
             🚀 执行全部方案（{{ pendingCount(blk) }}）
           </button>
         </div>
-        <button class="clear-btn" @click.stop="onClear(blk)">✅ 恢复通行</button>
+
+        <!-- 道路抢修工单入口 / 进行中工单状态 -->
+        <div class="repair-box" @click.stop>
+          <template v-if="orderOf(blk)">
+            <button class="repair-link" @click="onFocusOrder(orderOf(blk))">
+              🔧 抢修工单：{{ repair.statusLabel(orderOf(blk).status)
+                }}<template v-if="orderOf(blk).status === 'accepted'">（{{ orderOf(blk).progress }}%）</template>
+                <template v-if="orderOf(blk).delayed"> · ⏰已延期×{{ orderOf(blk).delayCount }}</template>
+                <em>查看 ›</em>
+            </button>
+          </template>
+          <button v-else class="repair-btn" @click="repair.startAssign(blk.id)">
+            🔧 发起抢修（分配队伍/车辆/物资）
+          </button>
+        </div>
+
+        <button class="clear-btn" @click.stop="onClear(blk)">
+          {{ orderOf(blk) ? '✅ 强制恢复通行（自动办结抢修单）' : '✅ 恢复通行' }}
+        </button>
       </template>
       <p v-else class="bc-meta">✅ {{ blk.clearedAt }} 恢复通行</p>
 
@@ -135,10 +153,12 @@ import { ref, computed } from 'vue'
 import { useCommandStore, dispatchParts } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
 
 const cmd = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 
 const form = ref({ name: '', reason: '塌方/滑坡', reporter: '' })
 const reportMsg = ref('')
@@ -150,6 +170,12 @@ const countOf = (blk, kind) => blk.impacts.filter((i) => i.kind === kind).length
 const pendingCount = (blk) => blk.impacts.filter((i) => i.checked && !i.done && i.plan).length
 const heldQty = (d) => dispatchParts(d).heldQty
 const shelterName = (id) => transfer.shelters.find((s) => s.id === id)?.name || '—'
+// 该阻断进行中的抢修工单
+const orderOf = (blk) => repair.orderOfBlock(blk.id)
+// 跳转到抢修页签并定位工单（DispatchPanel 监听 focusOrderId 自动切页签）
+function onFocusOrder(o) {
+  repair.focusOrder(o.id)
+}
 
 const ACTION_ICON = { detour: '🔀', reassign: '🔁', suspend: '⏸' }
 const optLabel = (opt) => `${ACTION_ICON[opt.action] || ''} ${opt.label}`
@@ -178,8 +204,15 @@ function onApplyAll(blk) {
   roadblock.applyAll(blk.id)
 }
 function onClear(blk) {
-  roadblock.clearBlock(blk.id)
   resumeMsg.value = ''
+  const o = repair.orderOfBlock(blk.id)
+  if (o) {
+    const tip = o.status === 'done'
+      ? '该阻断有「待验收」抢修工单，直接恢复将按验收通过自动办结并归还资源，是否继续？'
+      : '该阻断有进行中的抢修工单，直接恢复将自动撤单（按实际消耗归还资源），是否继续？'
+    if (!window.confirm(tip)) return
+  }
+  roadblock.clearBlock(blk.id)
 }
 function onResumeAll() {
   const r = roadblock.resumeHeld()
@@ -310,6 +343,21 @@ function onResumeAll() {
   background: rgba(76,175,80,0.08); color: #a5d6a7; font-size: 11px; font-weight: 600; cursor: pointer;
 }
 .clear-btn:hover { background: rgba(76,175,80,0.18); }
+
+/* 道路抢修入口 */
+.repair-box { margin-top: 7px; }
+.repair-btn {
+  width: 100%; padding: 7px; border: 1px dashed rgba(255,152,0,0.55); border-radius: 7px;
+  background: rgba(255,152,0,0.07); color: #ffcc80; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.repair-btn:hover { background: rgba(255,152,0,0.16); }
+.repair-link {
+  width: 100%; padding: 7px 9px; border: 1px solid rgba(255,152,0,0.45); border-radius: 7px;
+  background: rgba(255,152,0,0.1); color: #ffcc80; font-size: 11px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+}
+.repair-link em { margin-left: auto; font-style: normal; font-size: 10px; color: #ffe0b2; font-weight: 400; }
+.repair-link:hover { background: rgba(255,152,0,0.18); }
 
 /* 处置日志 */
 .blk-log { margin-top: 8px; border-top: 1px dashed rgba(120,160,220,0.15); padding-top: 6px; }

@@ -52,6 +52,14 @@
         <span class="num" style="color:#ef5350">{{ roadblock.activeBlocks.length }}</span>
         <span class="lab">道路阻断</span>
       </div>
+      <div class="stat" :class="{ blocked: repair.workingCount }">
+        <span class="num" style="color:#ffc107">{{ repair.workingCount }}</span>
+        <span class="lab">抢修中</span>
+      </div>
+      <div class="stat" :class="{ blocked: repair.verifyCount }">
+        <span class="num" style="color:#ce93ff">{{ repair.verifyCount }}</span>
+        <span class="lab">待验收</span>
+      </div>
       <div class="stat">
         <span class="num" style="color:#4fc3f7">{{ transfer.stats.inTransit }}</span>
         <span class="lab">在途转移</span>
@@ -85,11 +93,13 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useCommandStore } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
 import { SCENARIOS } from '@/mock/data'
 
 const store = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 const scenarios = SCENARIOS
 const now = ref('')
 let timer = null

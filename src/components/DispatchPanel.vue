@@ -12,6 +12,9 @@
       <button :class="{ active: tab === 'road' }" @click="tab = 'road'">
         🚧 道路阻断<span v-if="roadblock.activeBlocks.length" class="badge red">{{ roadblock.activeBlocks.length }}</span>
       </button>
+      <button :class="{ active: tab === 'repair' }" @click="tab = 'repair'">
+        🔧 道路抢修<span v-if="repair.activeOrders.length" class="badge orange">{{ repair.activeOrders.length }}</span>
+      </button>
     </div>
 
     <template v-if="tab === 'single'">
@@ -179,7 +182,10 @@
     <TransferPanel v-else-if="tab === 'transfer'" />
 
     <!-- 道路阻断处置 -->
-    <RoadBlockPanel v-else />
+    <RoadBlockPanel v-else-if="tab === 'road'" />
+
+    <!-- 道路抢修工单 -->
+    <RepairPanel v-else-if="tab === 'repair'" />
   </div>
 </template>
 
@@ -188,14 +194,17 @@ import { ref, computed, reactive, watch } from 'vue'
 import { useCommandStore, dispatchParts } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
 import { RESOURCE_TYPES } from '@/mock/data'
 import PlanPanel from '@/components/PlanPanel.vue'
 import TransferPanel from '@/components/TransferPanel.vue'
 import RoadBlockPanel from '@/components/RoadBlockPanel.vue'
+import RepairPanel from '@/components/RepairPanel.vue'
 
 const store = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 const tab = ref('single')
 const form = ref({ baseId: '', type: 'personnel', qty: 0 })
 
@@ -298,6 +307,13 @@ function onDispatch() {
 watch(() => store.scenarioId, () => {
   form.value = { baseId: '', type: 'personnel', qty: 0 }
 })
+// 阻断卡片发起抢修 / 查看工单 → 自动跳到抢修页签
+watch(() => repair.assigningBlockId, (id) => {
+  if (id) tab.value = 'repair'
+})
+watch(() => repair.focusOrderId, (id) => {
+  if (id) tab.value = 'repair'
+})
 watch(selectedEvent, (ev) => {
   if (ev) {
     // 默认选择距受灾点最近的基地
@@ -336,6 +352,7 @@ watch(selectedEvent, (ev) => {
 }
 .badge.teal { background: #26a69a; }
 .badge.red { background: #ef5350; }
+.badge.orange { background: #ff9800; }
 .panel-sub {
   font-size: 12px; color: #6f8cb8; font-weight: 600;
   border-left: 3px solid #4d8dff; padding-left: 8px; margin: 6px 0;

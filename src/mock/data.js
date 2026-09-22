@@ -41,6 +41,20 @@ export const TRANSFER_STATUS = [
   { value: 'closed', label: '已转出', color: '#4caf50' }
 ]
 
+// 道路抢修工单状态机：待接单 → 抢修中 → 待验收 → 已办结（验收通过解除封闭）
+// 抢修中可延期（保留阻断）；抢修中/待验收可转失败/撤单（保留阻断，按实际消耗归还资源）
+export const REPAIR_STATUS = [
+  { value: 'dispatched', label: '待接单', color: '#ff9800' },
+  { value: 'accepted', label: '抢修中', color: '#2f9cf5' },
+  { value: 'done', label: '待验收', color: '#ab47bc' },
+  { value: 'cleared', label: '已办结', color: '#4caf50' },
+  { value: 'failed', label: '抢修失败', color: '#ef5350' },
+  { value: 'cancelled', label: '已撤单', color: '#78909c' }
+]
+
+// 抢修可领用的物资目录（队伍人员与车辆单列分配）
+export const REPAIR_MATERIAL_TYPES = ['medical', 'food', 'water', 'tent']
+
 // 登记环节
 export const REGISTER_STAGES = [
   { value: 'pickup', label: '接运登记', icon: '🚌', hint: '现场登车，核录人员信息' },

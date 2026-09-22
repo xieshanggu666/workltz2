@@ -20,6 +20,7 @@
       <div class="legend-item"><i class="dot" style="background:#2962ff"></i>资源库/救援点</div>
       <div class="legend-item"><i class="dot" style="background:#26a69a"></i>安置点/转移路线</div>
       <div class="legend-item"><i class="dot" style="background:#c62828"></i>道路阻断区</div>
+      <div class="legend-item"><i class="dot" style="background:#ff9800"></i>道路抢修中</div>
     </div>
 
     <!-- 圈画提示 -->
@@ -48,12 +49,14 @@ import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useCommandStore } from '@/store/command'
 import { useTransferStore } from '@/store/transfer'
 import { useRoadblockStore } from '@/store/roadblock'
+import { useRepairStore } from '@/store/repair'
 import { loadAMap } from '@/config/amap'
 import { EVENT_TYPES, SEVERITY, RESOURCE_TYPES } from '@/mock/data'
 
 const store = useCommandStore()
 const transfer = useTransferStore()
 const roadblock = useRoadblockStore()
+const repair = useRepairStore()
 const mapRef = ref(null)
 const loading = ref(true)
 const loadError = ref('')
@@ -293,9 +296,14 @@ function renderBlocks() {
     blk._poly = poly
     const cx = blk.polygon.reduce((s, p) => s + p[0], 0) / blk.polygon.length
     const cy = blk.polygon.reduce((s, p) => s + p[1], 0) / blk.polygon.length
+    // 阻断上进行中的抢修工单：标记进度/状态（待验收显示 ✓）
+    const ro = active ? repair.orderOfBlock(blk.id) : null
+    const badge = ro
+      ? `<i class="blk-repair ${ro.status}">${ro.status === 'done' ? '✓' : '🔧'}${ro.status === 'accepted' ? ro.progress + '%' : ''}</i>`
+      : ''
     const marker = new amap.Marker({
       position: [cx, cy],
-      content: `<div class="blk-marker ${active ? '' : 'cleared'}" title="${blk.name}">🚧</div>`,
+      content: `<div class="blk-marker ${active ? '' : 'cleared'}" title="${blk.name}${ro ? `（抢修：${repair.statusLabel(ro.status)}）` : ''}">🚧${badge}</div>`,
       anchor: 'center',
       cursor: 'pointer'
     })
@@ -430,6 +438,11 @@ watch(
 // 道路阻断：阻断区增删/状态变化 → 重绘；圈画草稿 → 预览；圈画模式 → 绑定地图事件
 watch(
   () => roadblock.blocks.map((b) => b.id + b.status).join(','),
+  () => renderBlocks()
+)
+// 抢修工单状态/进度变化 → 刷新阻断标记上的抢修角标
+watch(
+  () => repair.orders.map((o) => o.id + o.status + o.progress).join(','),
   () => renderBlocks()
 )
 watch(() => roadblock.draft.length, () => renderDraft())
@@ -594,6 +607,7 @@ watch(() => roadblock.selectedBlockId, (id) => {
 }
 /* 道路阻断标记与圈画草稿点 */
 .blk-marker {
+  position: relative;
   width: 30px; height: 30px; border-radius: 50%;
   background: #b71c1c; border: 2.5px solid #fff;
   display: flex; align-items: center; justify-content: center;
@@ -601,6 +615,15 @@ watch(() => roadblock.selectedBlockId, (id) => {
   animation: blkPulse 1.8s ease-out infinite;
 }
 .blk-marker.cleared { background: #616161; animation: none; opacity: 0.75; }
+/* 抢修角标：待接单/抢修中橙色，待验收绿色 */
+.blk-repair {
+  position: absolute; top: -7px; right: -10px;
+  font-style: normal; font-size: 9px; font-weight: 700; line-height: 14px;
+  padding: 0 4px; min-width: 16px; text-align: center;
+  border-radius: 8px; border: 1.5px solid #fff;
+  background: #ff9800; color: #fff; white-space: nowrap;
+}
+.blk-repair.done { background: #ab47bc; }
 @keyframes blkPulse {
   0% { box-shadow: 0 0 0 0 rgba(239,83,80,0.55); }
   100% { box-shadow: 0 0 0 14px rgba(239,83,80,0); }
